@@ -15,37 +15,21 @@ jobs:
   build-and-deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-        env:
-          VITE_AZURE_CLIENT_ID:    ${{ secrets.VITE_AZURE_CLIENT_ID }}
-          VITE_AZURE_TENANT_ID:    ${{ secrets.VITE_AZURE_TENANT_ID }}
-          VITE_AZURE_REDIRECT_URI: ${{ secrets.VITE_AZURE_REDIRECT_URI }}
-          VITE_API_BASE_URL:       ${{ secrets.VITE_API_BASE_URL }}
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_HAPPY_OCEAN_00B4EDF0F }}
-          repo_token:        ${{ secrets.GITHUB_TOKEN }}
-          action:            upload
-          app_location:      frontend/dist    # deploy directly from built output (skip_app_build ignores output_location)
-          skip_app_build:    true             # we built with npm run build above (VITE_* secrets baked in)
-          # staticwebapp.config.json is in frontend/public/ → Vite copies it into dist/ during build
+          repo_token:      ${{ secrets.GITHUB_TOKEN }}
+          action:          upload
+          app_location:    frontend   # Oryx installs deps & runs npm run build here
+          output_location: dist       # Vite writes output to frontend/dist
+        env:
+          # Oryx inherits these — Vite bakes them into the JS bundle at build time
+          VITE_AZURE_CLIENT_ID:    ${{ secrets.VITE_AZURE_CLIENT_ID }}
+          VITE_AZURE_TENANT_ID:    ${{ secrets.VITE_AZURE_TENANT_ID }}
+          VITE_AZURE_REDIRECT_URI: ${{ secrets.VITE_AZURE_REDIRECT_URI }}
+          VITE_API_BASE_URL:       ${{ secrets.VITE_API_BASE_URL }}
