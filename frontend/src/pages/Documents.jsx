@@ -136,7 +136,7 @@ function SharePointNotice({ onDismiss }) {
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 
-function UploadModal({ onClose, onSuccess, defaultCategory }) {
+function UploadModal({ onClose, onSuccess, onNotConfigured, defaultCategory }) {
   const [file, setFile]         = useState(null);
   const [custSearch, setCustSearch] = useState('');
   const [customers, setCustomers]   = useState([]);
@@ -194,6 +194,7 @@ function UploadModal({ onClose, onSuccess, defaultCategory }) {
       if (err.response?.status === 501) {
         toast.error(msg, { duration: 6000 });
         if (detail) console.warn('SharePoint config needed:', detail);
+        onNotConfigured?.();
       } else {
         toast.error(msg);
       }
@@ -444,6 +445,7 @@ export default function Documents() {
   const [category, setCategory]     = useState('');
   const [showExpiring, setShowExpiring] = useState(false);
   const [showUpload, setShowUpload]  = useState(false);
+  const [showSpNotice, setShowSpNotice] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -509,6 +511,7 @@ export default function Documents() {
           defaultCategory={category || 'Customer Passport'}
           onClose={() => setShowUpload(false)}
           onSuccess={() => { setShowUpload(false); load(); }}
+          onNotConfigured={() => { setShowUpload(false); setShowSpNotice(true); }}
         />
       )}
 
@@ -537,8 +540,8 @@ export default function Documents() {
         </div>
       </div>
 
-      {/* SharePoint notice */}
-      <SharePointNotice />
+      {/* SharePoint notice — only shown if upload returns 501 (not configured) */}
+      {showSpNotice && <SharePointNotice onDismiss={() => setShowSpNotice(false)} />}
 
       {/* Body: sidebar + main */}
       <div className="flex gap-5">
