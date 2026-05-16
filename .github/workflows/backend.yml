@@ -13,7 +13,7 @@ on:
 
 env:
   NODE_VERSION: '22.x'
-  AZURE_WEBAPP_NAME: flynow-bms-api   # ← replace with your Azure App Service name
+  AZURE_WEBAPP_NAME: flynow-bms-api   # URL: flynow-bms-api-gvfzckfnejhmdxan.westeurope-01.azurewebsites.net
 
 jobs:
   build-and-test:

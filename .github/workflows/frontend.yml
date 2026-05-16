@@ -1,3 +1,5 @@
+# Frontend: https://happy-ocean-00b4edf0f.7.azurestaticapps.net
+# API:      https://flynow-bms-api-gvfzckfnejhmdxan.westeurope-01.azurewebsites.net/api
 name: Deploy Frontend → Azure Static Web Apps
 
 on:
