@@ -1,17 +1,15 @@
-import { Plane } from 'lucide-react';
-
 export default function LoginPage({ onLogin }) {
   return (
     <div className="min-h-screen bg-[#003366] flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md text-center">
         <div className="flex justify-center mb-4">
-          <div className="bg-[#003366] rounded-full p-4">
-            <Plane className="text-[#C8921A]" size={32} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Now Travel & Tours Ltd"
+            className="h-24 w-auto object-contain"
+          />
         </div>
-        <h1 className="text-2xl font-bold text-[#003366] mb-1">FlyNow BMS</h1>
-        <p className="text-gray-500 text-sm mb-1">Now Travel & Tours Limited</p>
-        <p className="text-gray-400 text-xs mb-8">Business Management System</p>
+        <p className="text-gray-400 text-xs mb-8 font-medium tracking-wide uppercase">Business Management System</p>
 
         <button
           onClick={onLogin}
