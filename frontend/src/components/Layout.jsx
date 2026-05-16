@@ -2,13 +2,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
 import {
   LayoutDashboard, Users, CalendarCheck, Globe, FileText,
-  FolderOpen, UserCog, LogOut,
+  FolderOpen, UserCog, LogOut, Package,
 } from 'lucide-react';
 
 const NAV = [
   { to: '/',          icon: LayoutDashboard, label: 'Dashboard'  },
   { to: '/customers', icon: Users,           label: 'Customers'  },
   { to: '/bookings',  icon: CalendarCheck,   label: 'Bookings'   },
+  { to: '/packages',  icon: Package,         label: 'Packages'   },
   { to: '/visas',     icon: Globe,           label: 'Visas'      },
   { to: '/invoices',  icon: FileText,        label: 'Invoices'   },
   { to: '/documents', icon: FolderOpen,      label: 'Documents'  },

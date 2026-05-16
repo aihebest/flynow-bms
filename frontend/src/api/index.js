@@ -110,6 +110,15 @@ export const staff = {
   rejectLeave:   (id, reason) => api.patch(`/staff/leave/${id}/reject`, { reason }),
 };
 
+// Packages
+export const packages = {
+  list:    (params)   => api.get('/packages', { params }),
+  getById: (id)       => api.get(`/packages/${id}`),
+  create:  (data)     => api.post('/packages', data),
+  update:  (id, data) => api.patch(`/packages/${id}`, data),
+  remove:  (id)       => api.delete(`/packages/${id}`),
+};
+
 // Dashboard
 export const dashboard = {
   summary:       () => api.get('/dashboard/summary'),

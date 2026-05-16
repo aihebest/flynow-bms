@@ -11,6 +11,7 @@ router.use('/invoices',   require('./invoices'));
 router.use('/documents',  require('./documents'));
 router.use('/staff',      require('./staff'));
 router.use('/dashboard',  require('./dashboard'));
+router.use('/packages',   require('./packages'));
 // NOTE: /webhooks/paystack is mounted directly in app.js (public, no Entra ID auth)
 
 module.exports = router;

@@ -9,6 +9,7 @@ import Visas       from './pages/Visas';
 import Invoices    from './pages/Invoices';
 import Documents   from './pages/Documents';
 import Staff       from './pages/Staff';
+import Packages    from './pages/Packages';
 import LoginPage   from './pages/Login';
 
 function ProtectedRoute({ children }) {
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="visas/*"     element={<Visas />} />
         <Route path="invoices/*"  element={<Invoices />} />
         <Route path="documents/*" element={<Documents />} />
+        <Route path="packages/*"  element={<Packages />} />
         <Route path="staff/*"     element={<Staff />} />
       </Route>
 
