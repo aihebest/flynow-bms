@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
 import {
   LayoutDashboard, Users, CalendarCheck, Globe, FileText,
-  FolderOpen, UserCog, LogOut, Plane
+  FolderOpen, UserCog, LogOut,
 } from 'lucide-react';
 
 const NAV = [
@@ -28,12 +28,15 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-64 bg-[#003366] flex flex-col shadow-xl">
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-blue-800">
-          <div className="flex items-center gap-2">
-            <Plane className="text-[#C8921A]" size={22} />
-            <span className="text-white font-bold text-lg tracking-tight">FlyNow BMS</span>
-          </div>
-          <p className="text-blue-300 text-xs mt-0.5">Now Travel & Tours Ltd</p>
+        <div className="px-4 py-4 border-b border-blue-800 flex flex-col items-center">
+          <img
+            src="/logo.png"
+            alt="Now Travel & Tours Ltd"
+            className="h-16 w-auto object-contain"
+          />
+          <p className="text-blue-300 text-xs mt-2 text-center font-medium tracking-wide">
+            Business Management System
+          </p>
         </div>
 
         {/* Navigation */}
