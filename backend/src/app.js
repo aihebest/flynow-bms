@@ -16,7 +16,7 @@ app.use(helmet());
 // ─── CORS ──────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'https://flynow-bms.azurestaticapps.net',  // replace with your Static Web App URL
+  'https://happy-ocean-00b4edf0f.7.azurestaticapps.net',
 ].filter(Boolean);
 
 app.use(cors({
