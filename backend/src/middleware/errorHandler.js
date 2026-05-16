@@ -15,7 +15,8 @@ function errorHandler(err, req, res, next) {
 
   res.status(status).json({
     error: message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+    // Temporarily expose detail in production to aid debugging — remove after fix
+    detail: err.stack || err.toString(),
   });
 }
 
