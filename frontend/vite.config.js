@@ -18,6 +18,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: 'esnext',   // required for top-level await (msalInstance.initialize())
     outDir: 'dist',
     sourcemap: false,
     rollupOptions: {

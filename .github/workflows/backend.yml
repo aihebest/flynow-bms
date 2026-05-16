@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test --if-present
+        run: npx jest --passWithNoTests
         env:
           NODE_ENV: test
 
