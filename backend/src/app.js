@@ -17,6 +17,8 @@ app.use(helmet());
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://happy-ocean-00b4edf0f.7.azurestaticapps.net',
+  'https://nowtravelbms.com',
+  'https://www.nowtravelbms.com',
 ].filter(Boolean);
 
 app.use(cors({
