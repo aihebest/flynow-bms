@@ -13,6 +13,9 @@ export const msalInstance = new PublicClientApplication(msalConfig);
 
 await msalInstance.initialize();
 
+// Handle redirect response after returning from Microsoft login
+await msalInstance.handleRedirectPromise();
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <MsalProvider instance={msalInstance}>

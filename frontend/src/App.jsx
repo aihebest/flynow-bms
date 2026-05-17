@@ -22,8 +22,8 @@ export default function App() {
   const { instance } = useMsal();
 
   function handleLogin() {
-    instance.loginPopup(loginRequest).catch((err) => {
-      console.error('MSAL loginPopup error:', err);
+    instance.loginRedirect(loginRequest).catch((err) => {
+      console.error('MSAL loginRedirect error:', err);
       alert('Login failed: ' + err.message);
     });
   }
