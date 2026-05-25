@@ -59,6 +59,20 @@ const CURRENCIES = ['NGN', 'USD', 'GBP', 'EUR'];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+// Field must live at module scope — NOT inside a form component.
+// If defined inside a component it gets a new identity on every render,
+// causing React to unmount/remount children and losing input focus.
+function Field({ label, children, required }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
 function StatusBadge({ status }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || 'bg-gray-100 text-gray-600'}`}>
@@ -304,14 +318,6 @@ function BookingForm({ booking, onSave, onCancel }) {
     }
   };
 
-  const Field = ({ label, children, required }) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
-  );
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
 
@@ -871,6 +877,11 @@ export default function Bookings() {
 
   if (view === 'detail') return <BookingDetail booking={selected} onBack={handleBack} onEdit={handleEdit} />;
   if (view === 'new')    return <BookingForm booking={null}     onSave={handleSaved} onCancel={handleCancel} />;
+  if (view === 'edit')   return <BookingForm booking={selected} onSave={handleSaved} onCancel={handleCancel} />;
+
+  return <BookingList onNew={() => setView('new')} onSelect={handleSelect} />;
+}
+ncel={handleCancel} />;
   if (view === 'edit')   return <BookingForm booking={selected} onSave={handleSaved} onCancel={handleCancel} />;
 
   return <BookingList onNew={() => setView('new')} onSelect={handleSelect} />;

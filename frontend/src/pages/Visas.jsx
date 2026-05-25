@@ -225,6 +225,21 @@ function VisaList({ onNew, onSelect }) {
   );
 }
 
+// ─── Shared Field component ───────────────────────────────────────────────────
+// Must live at module scope — defining inside a component causes focus loss
+// because React sees a new component type on every render and unmounts children.
+
+function Field({ label, children, required }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
 // ─── Visa Form ────────────────────────────────────────────────────────────────
 
 function VisaForm({ visa, onSave, onCancel }) {
@@ -289,14 +304,8 @@ function VisaForm({ visa, onSave, onCancel }) {
   };
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
-  const Field = ({ label, children, required }) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
-  );
+
+  // (Field is defined at module scope — see below VisaList)
 
   return (
     <div className="space-y-4">
@@ -684,6 +693,14 @@ export default function Visas() {
   const handleBack    = ()  => { setSelected(null); setView('list'); };
   const handleSaved   = ()  => { setListKey(k => k + 1); setView('list'); setSelected(null); };
   const handleCancel  = ()  => selected ? setView('detail') : setView('list');
+
+  if (view === 'new')    return <VisaForm visa={null}     onSave={handleSaved} onCancel={handleBack} />;
+  if (view === 'edit')   return <VisaForm visa={selected} onSave={handleSaved} onCancel={handleCancel} />;
+  if (view === 'detail') return <VisaDetail visa={selected} onBack={handleBack} onEdit={handleEdit} />;
+
+  return <VisaList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
+}
+tail') : setView('list');
 
   if (view === 'new')    return <VisaForm visa={null}     onSave={handleSaved} onCancel={handleBack} />;
   if (view === 'edit')   return <VisaForm visa={selected} onSave={handleSaved} onCancel={handleCancel} />;

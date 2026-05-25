@@ -33,3 +33,10 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Vite temp files
+frontend/vite.config.js.timestamp-*
+
+# Office / media artifacts
+*.docx
+frontend/public/Outlook-*.png

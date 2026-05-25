@@ -47,6 +47,20 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Field must be defined at module scope — NOT inside a form component.
+// Defining it inside a component creates a new function type on every render,
+// which causes React to unmount/remount children (losing input focus).
+function Field({ label, children, required }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
 function isOverdue(inv) {
   if (!inv.due_date || ['Paid', 'Cancelled', 'Refunded'].includes(inv.status)) return false;
   return new Date(inv.due_date) < new Date();
@@ -272,14 +286,6 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
   };
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
-  const Field = ({ label, children, required }) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
-  );
 
   return (
     <div className="space-y-4">
@@ -903,6 +909,11 @@ export default function Invoices() {
   const handleSaved   = ()    => { setListKey(k => k + 1); setView('list'); setSelected(null); };
 
   if (view === 'new')    return <InvoiceForm invoice={null} onSave={handleSaved} onCancel={handleBack} />;
+  if (view === 'detail') return <InvoiceDetail invoice={selected} onBack={handleBack} />;
+
+  return <InvoiceList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
+}
+oice={null} onSave={handleSaved} onCancel={handleBack} />;
   if (view === 'detail') return <InvoiceDetail invoice={selected} onBack={handleBack} />;
 
   return <InvoiceList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
