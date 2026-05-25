@@ -700,11 +700,3 @@ export default function Visas() {
 
   return <VisaList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
 }
-tail') : setView('list');
-
-  if (view === 'new')    return <VisaForm visa={null}     onSave={handleSaved} onCancel={handleBack} />;
-  if (view === 'edit')   return <VisaForm visa={selected} onSave={handleSaved} onCancel={handleCancel} />;
-  if (view === 'detail') return <VisaDetail visa={selected} onBack={handleBack} onEdit={handleEdit} />;
-
-  return <VisaList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
-}

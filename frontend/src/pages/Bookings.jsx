@@ -881,8 +881,3 @@ export default function Bookings() {
 
   return <BookingList onNew={() => setView('new')} onSelect={handleSelect} />;
 }
-ncel={handleCancel} />;
-  if (view === 'edit')   return <BookingForm booking={selected} onSave={handleSaved} onCancel={handleCancel} />;
-
-  return <BookingList onNew={() => setView('new')} onSelect={handleSelect} />;
-}

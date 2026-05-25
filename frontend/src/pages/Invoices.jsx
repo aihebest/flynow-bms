@@ -913,8 +913,3 @@ export default function Invoices() {
 
   return <InvoiceList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
 }
-oice={null} onSave={handleSaved} onCancel={handleBack} />;
-  if (view === 'detail') return <InvoiceDetail invoice={selected} onBack={handleBack} />;
-
-  return <InvoiceList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
-}
