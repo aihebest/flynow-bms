@@ -143,8 +143,8 @@ async function createCustomer(req, res, next) {
       address, city, state, notes, source = 'Walk-in', assigned_to,
     } = req.body;
 
-    if (!first_name || !last_name || !phone) {
-      return res.status(400).json({ error: 'first_name, last_name, and phone are required' });
+    if (!first_name || !last_name) {
+      return res.status(400).json({ error: 'first_name and last_name are required' });
     }
 
     const result = await query(`

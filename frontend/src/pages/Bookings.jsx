@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { bookings as bookingsApi, customers as customersApi } from '../api';
+import { bookings as bookingsApi } from '../api';
+import CustomerSearch from '../components/CustomerSearch';
 import toast from 'react-hot-toast';
 import {
   PlaneTakeoff, Hotel, Globe, Car, Shield, Package,
   Plus, Search, ChevronLeft, ChevronRight, X, Edit2,
-  ArrowRight, User, Calendar, Users, Hash, Banknote,
-  FileText, Phone, AlertCircle, Printer,
+  ArrowRight, User, Calendar, Banknote,
+  FileText, Printer,
 } from 'lucide-react';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -247,11 +248,9 @@ function BookingList({ onNew, onSelect }) {
 
 function BookingForm({ booking, onSave, onCancel }) {
   const isEdit = !!booking;
-  const [customers, setCustomers] = useState([]);
   const [custSearch, setCustSearch] = useState(
     booking ? `${booking.first_name} ${booking.last_name}` : ''
   );
-  const [showCustDropdown, setShowCustDropdown] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -274,25 +273,6 @@ function BookingForm({ booking, onSave, onCancel }) {
     internal_notes:     booking?.internal_notes || '',
     customer_notes:     booking?.customer_notes || '',
   });
-
-  // Customer search
-  useEffect(() => {
-    if (custSearch.length < 2) { setCustomers([]); return; }
-    const t = setTimeout(async () => {
-      try {
-        const res = await customersApi.list({ search: custSearch, limit: 8 });
-        setCustomers(res.data.customers || []);
-        setShowCustDropdown(true);
-      } catch { /* ignore */ }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [custSearch]);
-
-  const selectCustomer = (c) => {
-    setForm(f => ({ ...f, customer_id: c.id }));
-    setCustSearch(`${c.first_name} ${c.last_name}`);
-    setShowCustDropdown(false);
-  };
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const isFlightType = ['Flight', 'Flight+Hotel', 'Airport Transfer'].includes(form.service_type);
@@ -357,36 +337,13 @@ function BookingForm({ booking, onSave, onCancel }) {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Customer" required>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search customer name..."
-                  value={custSearch}
-                  onChange={e => { setCustSearch(e.target.value); setForm(f => ({ ...f, customer_id: '' })); }}
-                  className={inputCls}
-                  autoComplete="off"
-                />
-                {showCustDropdown && customers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {customers.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => selectCustomer(c)}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
-                      >
-                        <span className="font-medium">{c.first_name} {c.last_name}</span>
-                        <span className="text-gray-400 ml-2 text-xs">{c.email}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {!form.customer_id && custSearch && (
-                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> Select a customer from the list
-                </p>
-              )}
+              <CustomerSearch
+                value={custSearch}
+                customerId={form.customer_id}
+                onChange={text => { setCustSearch(text); setForm(f => ({ ...f, customer_id: '' })); }}
+                onSelect={c => { setForm(f => ({ ...f, customer_id: c.id })); setCustSearch(`${c.first_name} ${c.last_name}`); }}
+                inputClassName={inputCls}
+              />
             </Field>
 
             <Field label="Service Type" required>

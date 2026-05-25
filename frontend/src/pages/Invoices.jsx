@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoices as invoicesApi, customers as customersApi } from '../api';
+import { invoices as invoicesApi } from '../api';
+import CustomerSearch from '../components/CustomerSearch';
 import toast from 'react-hot-toast';
 import {
   FileText, Plus, Search, ChevronLeft, ChevronRight,
-  AlertCircle, Banknote, CreditCard,
-  CheckCircle2, XCircle, PlusCircle, Send, RefreshCw, ExternalLink, Trash2,
+  Banknote, CreditCard,
+  CheckCircle2, XCircle, PlusCircle, Send, RefreshCw, ExternalLink, Trash2, Printer,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -212,9 +213,7 @@ function LineItemRow({ item, index, onChange, onRemove, currency }) {
 
 function InvoiceForm({ invoice, onSave, onCancel }) {
   const isEdit = !!invoice;
-  const [customers, setCustomers] = useState([]);
   const [custSearch, setCustSearch] = useState(invoice ? `${invoice.first_name} ${invoice.last_name}` : '');
-  const [showCustDrop, setShowCustDrop] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
@@ -229,24 +228,6 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
   const [lineItems, setLineItems] = useState(
     invoice ? [] : [{ description: '', quantity: 1, unit_price: '' }]
   );
-
-  useEffect(() => {
-    if (custSearch.length < 2) { setCustomers([]); return; }
-    const t = setTimeout(async () => {
-      try {
-        const r = await customersApi.list({ search: custSearch, limit: 8 });
-        setCustomers(r.data.customers || []);
-        setShowCustDrop(true);
-      } catch { /* ignore */ }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [custSearch]);
-
-  const selectCustomer = (c) => {
-    setForm(f => ({ ...f, customer_id: c.id }));
-    setCustSearch(`${c.first_name} ${c.last_name}`);
-    setShowCustDrop(false);
-  };
 
   const updateLineItem = (i, field, value) => {
     setLineItems(items => items.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
@@ -318,27 +299,14 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
               <Field label="Customer" required>
-                <div className="relative">
-                  <input type="text" placeholder="Search customer..." value={custSearch}
-                    onChange={e => { setCustSearch(e.target.value); setForm(f => ({ ...f, customer_id: '' })); }}
-                    className={inputCls} autoComplete="off" />
-                  {showCustDrop && customers.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {customers.map(c => (
-                        <button key={c.id} type="button" onClick={() => selectCustomer(c)}
-                          className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm">
-                          <span className="font-medium">{c.first_name} {c.last_name}</span>
-                          <span className="text-gray-400 ml-2 text-xs">{c.email}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {!form.customer_id && custSearch && (
-                  <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Select from list
-                  </p>
-                )}
+                <CustomerSearch
+                  value={custSearch}
+                  customerId={form.customer_id}
+                  onChange={text => { setCustSearch(text); setForm(f => ({ ...f, customer_id: '' })); }}
+                  onSelect={c => { setForm(f => ({ ...f, customer_id: c.id })); setCustSearch(`${c.first_name} ${c.last_name}`); }}
+                  inputClassName={inputCls}
+                  placeholder="Search or add customer..."
+                />
               </Field>
             </div>
             <Field label="Currency">
@@ -525,6 +493,156 @@ function InvoiceDetail({ invoice: initial, onBack }) {
   const [sending, setSending]   = useState(false);
   const [syncing, setSyncing]   = useState(false);
 
+  function handlePrint() {
+    const sym = CURRENCY_SYM[invoice.currency] || invoice.currency;
+    const fmtAmt = (v) => v != null ? sym + Number(v).toLocaleString('en-NG', { minimumFractionDigits: 2 }) : '—';
+    const fmtD   = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
+
+    const lineRows = lineItems.map(item => {
+      const total = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
+      return `
+        <tr>
+          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;color:#333">${item.description}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:center;color:#555">${item.quantity}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;color:#555">${fmtAmt(item.unit_price)}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;color:#003366">${fmtAmt(total)}</td>
+        </tr>`;
+    }).join('');
+
+    const payRows = payments.length ? payments.map(p => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #f5f5f5;color:#555">${fmtD(p.paid_at)}</td>
+        <td style="padding:8px;border-bottom:1px solid #f5f5f5;color:#555">${p.payment_method}</td>
+        <td style="padding:8px;border-bottom:1px solid #f5f5f5;font-family:monospace;font-size:12px;color:#777">${p.reference || '—'}</td>
+        <td style="padding:8px;border-bottom:1px solid #f5f5f5;text-align:right;color:#16a34a;font-weight:600">${fmtAmt(p.amount)}</td>
+      </tr>`).join('') : '';
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="UTF-8"/>
+      <title>Invoice ${invoice.invoice_number}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#333;background:#fff}
+        .page{max-width:800px;margin:0 auto;padding:48px 40px}
+        .print-bar{background:#003366;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+        .print-bar button{background:#C8921A;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer}
+        @media print{.no-print{display:none!important}.page{padding:24px}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+      </style>
+    </head><body>
+      <div class="print-bar no-print">
+        <span>Invoice ${invoice.invoice_number} — ready to save as PDF</span>
+        <button onclick="window.print()">Print / Save as PDF</button>
+      </div>
+      <div class="page">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C8921A;padding-bottom:24px;margin-bottom:28px">
+          <div>
+            <img src="/logo.png" alt="Now Travel and Tours" style="height:52px;object-fit:contain"/>
+            <div style="font-size:9px;color:#888;margin-top:6px;letter-spacing:1px;text-transform:uppercase">6 Tombia Street, GRA Phase 2, Port Harcourt</div>
+            <div style="font-size:9px;color:#888;margin-top:2px">admin@nowtravelandtours.com &nbsp;|&nbsp; +234 818 290 2621</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:26px;font-weight:800;color:#003366;text-transform:uppercase;letter-spacing:2px">INVOICE</div>
+            <div style="font-size:14px;font-weight:700;font-family:monospace;color:#C8921A;margin-top:4px">${invoice.invoice_number}</div>
+            <div style="font-size:11px;color:#888;margin-top:8px">Issue Date: ${fmtD(invoice.created_at)}</div>
+            ${invoice.due_date ? `<div style="font-size:11px;color:#888;margin-top:2px">Due Date: ${fmtD(invoice.due_date)}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Bill To -->
+        <div style="margin-bottom:28px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:6px;font-weight:700">Bill To</div>
+          <div style="font-size:16px;font-weight:700;color:#003366">${invoice.first_name} ${invoice.last_name}</div>
+          ${invoice.email ? `<div style="font-size:12px;color:#555;margin-top:3px">${invoice.email}</div>` : ''}
+          ${invoice.phone ? `<div style="font-size:12px;color:#555;margin-top:2px">${invoice.phone}</div>` : ''}
+        </div>
+
+        <!-- Line Items -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+          <thead>
+            <tr style="background:#003366;color:white">
+              <th style="padding:10px 8px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Description</th>
+              <th style="padding:10px 8px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:60px">Qty</th>
+              <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:120px">Unit Price</th>
+              <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:120px">Total</th>
+            </tr>
+          </thead>
+          <tbody>${lineRows}</tbody>
+        </table>
+
+        <!-- Totals -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:28px">
+          <div style="width:280px">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
+              <span>Subtotal</span><span>${fmtAmt(invoice.subtotal)}</span>
+            </div>
+            ${parseFloat(invoice.vat_rate) > 0 ? `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
+              <span>VAT (${invoice.vat_rate}%)</span><span>${fmtAmt(invoice.vat_amount)}</span>
+            </div>` : ''}
+            ${parseFloat(invoice.discount_amount) > 0 ? `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
+              <span>Discount</span><span style="color:#dc2626">-${fmtAmt(invoice.discount_amount)}</span>
+            </div>` : ''}
+            <div style="display:flex;justify-content:space-between;padding:10px 0 6px;font-size:16px;font-weight:800;color:#003366;border-top:2px solid #003366;margin-top:4px">
+              <span>Total</span><span>${fmtAmt(invoice.total_amount)}</span>
+            </div>
+            ${parseFloat(invoice.amount_paid) > 0 ? `
+            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#16a34a">
+              <span>Amount Paid</span><span>${fmtAmt(invoice.amount_paid)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;font-weight:700;color:${parseFloat(invoice.balance_due) > 0 ? '#dc2626' : '#16a34a'}">
+              <span>Balance Due</span><span>${fmtAmt(invoice.balance_due)}</span>
+            </div>` : ''}
+          </div>
+        </div>
+
+        ${invoice.notes ? `
+        <!-- Notes -->
+        <div style="background:#fffbf0;border-left:4px solid #C8921A;border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:24px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px;font-weight:700">Payment Instructions</div>
+          <div style="font-size:12px;color:#555;line-height:1.7;white-space:pre-wrap">${invoice.notes}</div>
+        </div>` : ''}
+
+        ${payRows ? `
+        <!-- Payments received -->
+        <div style="margin-bottom:24px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:8px;font-weight:700">Payments Received</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#f5f5f5">
+                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Date</th>
+                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Method</th>
+                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Reference</th>
+                <th style="padding:8px;text-align:right;font-weight:600;color:#555">Amount</th>
+              </tr>
+            </thead>
+            <tbody>${payRows}</tbody>
+          </table>
+        </div>` : ''}
+
+        <!-- Footer -->
+        <div style="border-top:2px solid #e5e7eb;margin-top:32px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="font-size:11px;color:#666;line-height:1.8">
+            <div style="font-weight:700;color:#003366;font-size:12px">Now Travel and Tours Limited</div>
+            <div>6 Tombia Street, GRA Phase 2, Port Harcourt, Rivers State</div>
+            <div>admin@nowtravelandtours.com &nbsp;|&nbsp; +234 818 290 2621</div>
+            <div>nowtravelandtours.com</div>
+          </div>
+          <div style="font-size:10px;color:#aaa;text-align:right;line-height:1.8;max-width:220px">
+            <div>IATA &amp; NANTA Certified</div>
+            <div>Thank you for your business!</div>
+            <div style="margin-top:4px;font-family:monospace">${invoice.invoice_number}</div>
+          </div>
+        </div>
+      </div>
+    </body></html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=750');
+    win.document.write(html);
+    win.document.close();
+  }
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -601,6 +719,14 @@ function InvoiceDetail({ invoice: initial, onBack }) {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Print / Download PDF */}
+          {!loading && (
+            <button onClick={handlePrint}
+              className="flex items-center gap-2 bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium">
+              <Printer className="w-4 h-4" /> Download PDF
+            </button>
+          )}
+
           {/* Paystack link — copy / open */}
           {invoice.paystack_link && (
             <a href={invoice.paystack_link} target="_blank" rel="noopener noreferrer"
