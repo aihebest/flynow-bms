@@ -500,38 +500,71 @@ function InvoiceDetail({ invoice: initial, onBack }) {
   const [syncing, setSyncing]   = useState(false);
 
   function handlePrint() {
-    const sym = CURRENCY_SYM[invoice.currency] || invoice.currency;
-    const fmtAmt = (v) => v != null ? sym + Number(v).toLocaleString('en-NG', { minimumFractionDigits: 2 }) : '—';
-    const fmtD   = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
+    const cur = invoice.currency || 'NGN';
+    const sym = CURRENCY_SYM[cur] || cur;
+    const fmtAmt = (v) => v != null
+      ? Number(v).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—';
+    const fmtD = (d) => d
+      ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-')
+      : '—';
 
-    const lineRows = lineItems.map(item => {
-      const total = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
+    // Amount in words
+    function amountToWords(amount) {
+      const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine',
+                    'Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen',
+                    'Seventeen','Eighteen','Nineteen'];
+      const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+      function n2w(n) {
+        if (n === 0) return '';
+        if (n < 20)  return ones[n];
+        if (n < 100) return tens[Math.floor(n/10)] + (n%10 ? ' '+ones[n%10] : '');
+        if (n < 1000) return ones[Math.floor(n/100)]+' Hundred'+(n%100 ? ' '+n2w(n%100) : '');
+        if (n < 1e6)  return n2w(Math.floor(n/1000))+' Thousand'+(n%1000 ? ' '+n2w(n%1000) : '');
+        if (n < 1e9)  return n2w(Math.floor(n/1e6))+' Million'+(n%1e6 ? ' '+n2w(n%1e6) : '');
+        return n2w(Math.floor(n/1e9))+' Billion'+(n%1e9 ? ' '+n2w(n%1e9) : '');
+      }
+      const koboNames = { NGN:'Kobo', USD:'Cent', GBP:'Penny', EUR:'Cent' };
+      const nairaNames = { NGN:'Naira', USD:'Dollar', GBP:'Pound', EUR:'Euro' };
+      const total = Math.round(amount * 100);
+      const major = Math.floor(total / 100);
+      const minor = total % 100;
+      let w = (n2w(major) || 'Zero') + ' ' + (nairaNames[cur] || cur);
+      if (minor > 0) w += ' and ' + n2w(minor) + ' ' + (koboNames[cur] || 'Kobo');
+      return w + ' Only';
+    }
+
+    // Line item rows
+    const lineRows = lineItems.map((item, idx) => {
+      const total = (parseFloat(item.quantity) || 1) * (parseFloat(item.unit_price) || 0);
       return `
         <tr>
-          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;color:#333">${item.description}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:center;color:#555">${item.quantity}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;color:#555">${fmtAmt(item.unit_price)}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600;color:#003366">${fmtAmt(total)}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#333;vertical-align:top;width:60px">${idx + 1}.</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#333;vertical-align:top">${item.description}</td>
+          <td style="padding:10px 8px;border-bottom:1px solid #eee;text-align:right;color:#333;vertical-align:top;white-space:nowrap;width:140px">${fmtAmt(total)}</td>
         </tr>`;
     }).join('');
 
+    // Payments received
     const payRows = payments.length ? payments.map(p => `
       <tr>
-        <td style="padding:8px;border-bottom:1px solid #f5f5f5;color:#555">${fmtD(p.paid_at)}</td>
-        <td style="padding:8px;border-bottom:1px solid #f5f5f5;color:#555">${p.payment_method}</td>
-        <td style="padding:8px;border-bottom:1px solid #f5f5f5;font-family:monospace;font-size:12px;color:#777">${p.reference || '—'}</td>
-        <td style="padding:8px;border-bottom:1px solid #f5f5f5;text-align:right;color:#16a34a;font-weight:600">${fmtAmt(p.amount)}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;color:#555">${fmtD(p.paid_at)}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;color:#555">${p.payment_method}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:11px;color:#777">${p.reference || '—'}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;text-align:right;color:#16a34a;font-weight:600">${fmtAmt(p.amount)}</td>
       </tr>`).join('') : '';
+
+    const totalAmt = parseFloat(invoice.total_amount) || 0;
 
     const html = `<!DOCTYPE html><html><head>
       <meta charset="UTF-8"/>
       <title>Invoice ${invoice.invoice_number}</title>
       <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#333;background:#fff}
-        .page{max-width:800px;margin:0 auto;padding:48px 40px}
+        body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;background:#fff}
+        .page{max-width:820px;margin:0 auto;padding:40px}
         .print-bar{background:#003366;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
-        .print-bar button{background:#C8921A;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:600;cursor:pointer}
+        .print-bar button{background:#C8921A;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer}
         @media print{.no-print{display:none!important}.page{padding:24px}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
       </style>
     </head><body>
@@ -540,107 +573,149 @@ function InvoiceDetail({ invoice: initial, onBack }) {
         <button onclick="window.print()">Print / Save as PDF</button>
       </div>
       <div class="page">
-        <!-- Header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #C8921A;padding-bottom:24px;margin-bottom:28px">
-          <div>
-            <img src="/logo.png" alt="Now Travel and Tours" style="height:52px;object-fit:contain"/>
-            <div style="font-size:9px;color:#888;margin-top:6px;letter-spacing:1px;text-transform:uppercase">6 Tombia Street, GRA Phase 2, Port Harcourt</div>
-            <div style="font-size:9px;color:#888;margin-top:2px">admin@nowtravelandtours.com &nbsp;|&nbsp; +234 818 290 2621</div>
+
+        <!-- ── TOP HEADER: Logo+Company left | INVOICE box right ── -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">
+
+          <!-- Left: company info -->
+          <div style="flex:1">
+            <img src="/logo.png" alt="Now Travel and Tours" style="height:60px;object-fit:contain;margin-bottom:10px;display:block"/>
+            <div style="font-size:15px;font-weight:800;color:#003366;text-transform:uppercase;margin-bottom:4px">NOW TRAVEL AND TOURS LTS</div>
+            <div style="font-size:11px;color:#444;line-height:1.9">
+              6 TOMBIA STREET NEW GRA PHASE II, PORTHARCOURT<br/>
+              <span style="font-weight:600">Phone:</span> 08038694210<br/>
+              <span style="font-weight:600">Email:</span> ndifreke@flynowtravels.com<br/>
+              <span style="font-weight:600">Vendor Code:</span><br/>
+              <span style="font-weight:600">TIN Number:</span> <strong>03635873-0001</strong>
+            </div>
           </div>
-          <div style="text-align:right">
-            <div style="font-size:26px;font-weight:800;color:#003366;text-transform:uppercase;letter-spacing:2px">INVOICE</div>
-            <div style="font-size:14px;font-weight:700;font-family:monospace;color:#C8921A;margin-top:4px">${invoice.invoice_number}</div>
-            <div style="font-size:11px;color:#888;margin-top:8px">Issue Date: ${fmtD(invoice.created_at)}</div>
-            ${invoice.due_date ? `<div style="font-size:11px;color:#888;margin-top:2px">Due Date: ${fmtD(invoice.due_date)}</div>` : ''}
+
+          <!-- Right: INVOICE details box -->
+          <div style="min-width:260px;margin-left:32px">
+            <div style="text-align:center;font-size:28px;font-weight:900;color:#003366;letter-spacing:3px;margin-bottom:10px">INVOICE</div>
+            <table style="width:100%;border-collapse:collapse;border:1px solid #003366;font-size:12px">
+              <tr>
+                <td style="padding:6px 10px;border:1px solid #003366;font-weight:600;color:#444;white-space:nowrap">Invoice Date</td>
+                <td style="padding:6px 10px;border:1px solid #003366;color:#222">${fmtD(invoice.created_at)}</td>
+              </tr>
+              <tr>
+                <td style="padding:6px 10px;border:1px solid #003366;font-weight:600;color:#444;white-space:nowrap">Invoice number</td>
+                <td style="padding:6px 10px;border:1px solid #003366;color:#003366;font-weight:700;font-size:11px">${invoice.invoice_number}</td>
+              </tr>
+              <tr>
+                <td style="padding:6px 10px;border:1px solid #003366;font-weight:600;color:#444">Currency</td>
+                <td style="padding:6px 10px;border:1px solid #003366;color:#222">${cur}</td>
+              </tr>
+              <tr>
+                <td style="padding:6px 10px;border:1px solid #003366;font-weight:600;color:#444">Subtotal</td>
+                <td style="padding:6px 10px;border:1px solid #003366;color:#222">${fmtAmt(invoice.subtotal)}</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 10px;border:1px solid #003366;font-weight:700;color:#222">Total</td>
+                <td style="padding:8px 10px;border:1px solid #003366;font-weight:800;font-size:14px;color:#003366">${fmtAmt(totalAmt)}</td>
+              </tr>
+            </table>
           </div>
         </div>
 
-        <!-- Bill To -->
-        <div style="margin-bottom:28px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:6px;font-weight:700">Bill To</div>
-          <div style="font-size:16px;font-weight:700;color:#003366">${invoice.first_name} ${invoice.last_name}</div>
-          ${invoice.email ? `<div style="font-size:12px;color:#555;margin-top:3px">${invoice.email}</div>` : ''}
-          ${invoice.phone ? `<div style="font-size:12px;color:#555;margin-top:2px">${invoice.phone}</div>` : ''}
+        <!-- ── BILL TO ── -->
+        <div style="margin-bottom:20px">
+          <div style="background:#003366;color:#fff;font-size:11px;font-weight:700;padding:5px 10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:0">BILL TO</div>
+          <div style="border:1px solid #003366;border-top:none;padding:10px 12px;font-size:12px;line-height:1.8;color:#333">
+            <div style="font-weight:700;font-size:13px;color:#003366">${invoice.first_name} ${invoice.last_name}</div>
+            ${invoice.company_name ? `<div>${invoice.company_name}</div>` : ''}
+            ${invoice.email ? `<div>${invoice.email}</div>` : ''}
+            ${invoice.phone ? `<div>${invoice.phone}</div>` : ''}
+          </div>
         </div>
 
-        <!-- Line Items -->
-        <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        <!-- ── LINE ITEMS TABLE ── -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
           <thead>
-            <tr style="background:#003366;color:white">
-              <th style="padding:10px 8px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Description</th>
-              <th style="padding:10px 8px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:60px">Qty</th>
-              <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:120px">Unit Price</th>
-              <th style="padding:10px 8px;text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;width:120px">Total</th>
+            <tr style="background:#003366;color:#fff">
+              <th style="padding:9px 8px;text-align:left;font-size:11px;font-weight:700;width:55px">Item No</th>
+              <th style="padding:9px 8px;text-align:left;font-size:11px;font-weight:700">Items Descriptions</th>
+              <th style="padding:9px 8px;text-align:right;font-size:11px;font-weight:700;width:140px">${cur}&nbsp;&nbsp;Amount</th>
             </tr>
           </thead>
           <tbody>${lineRows}</tbody>
         </table>
 
-        <!-- Totals -->
-        <div style="display:flex;justify-content:flex-end;margin-bottom:28px">
-          <div style="width:280px">
-            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
-              <span>Subtotal</span><span>${fmtAmt(invoice.subtotal)}</span>
-            </div>
-            ${parseFloat(invoice.vat_rate) > 0 ? `
-            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
-              <span>VAT (${invoice.vat_rate}%)</span><span>${fmtAmt(invoice.vat_amount)}</span>
-            </div>` : ''}
+        <!-- ── TOTALS ── -->
+        <div style="display:flex;justify-content:flex-end;margin-top:12px;margin-bottom:20px">
+          <table style="font-size:13px;border-collapse:collapse">
+            <tr>
+              <td style="padding:5px 16px 5px 0;color:#555;text-align:right;min-width:140px">Subtotal:</td>
+              <td style="padding:5px 0;text-align:right;min-width:130px;font-weight:600">${fmtAmt(invoice.subtotal)}</td>
+            </tr>
             ${parseFloat(invoice.discount_amount) > 0 ? `
-            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;border-bottom:1px solid #eee">
-              <span>Discount</span><span style="color:#dc2626">-${fmtAmt(invoice.discount_amount)}</span>
-            </div>` : ''}
-            <div style="display:flex;justify-content:space-between;padding:10px 0 6px;font-size:16px;font-weight:800;color:#003366;border-top:2px solid #003366;margin-top:4px">
-              <span>Total</span><span>${fmtAmt(invoice.total_amount)}</span>
-            </div>
+            <tr>
+              <td style="padding:5px 16px 5px 0;color:#555;text-align:right">Discount:</td>
+              <td style="padding:5px 0;text-align:right;color:#dc2626;font-weight:600">-${fmtAmt(invoice.discount_amount)}</td>
+            </tr>` : ''}
+            ${parseFloat(invoice.vat_rate) > 0 ? `
+            <tr>
+              <td style="padding:5px 16px 5px 0;color:#003366;font-weight:700;text-align:right">${invoice.vat_rate}% VAT:</td>
+              <td style="padding:5px 0;text-align:right;font-weight:700;color:#003366">${fmtAmt(invoice.vat_amount)}</td>
+            </tr>` : ''}
+            <tr>
+              <td colspan="2" style="padding:4px 0"><div style="border-top:1px solid #aaa"></div></td>
+            </tr>
+            <tr>
+              <td style="padding:8px 16px 8px 0;font-size:15px;font-weight:800;color:#003366;text-align:right">Total</td>
+              <td style="padding:8px 0;text-align:right;font-size:15px;font-weight:800;color:#003366">${fmtAmt(totalAmt)}</td>
+            </tr>
             ${parseFloat(invoice.amount_paid) > 0 ? `
-            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:#16a34a">
-              <span>Amount Paid</span><span>${fmtAmt(invoice.amount_paid)}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;font-weight:700;color:${parseFloat(invoice.balance_due) > 0 ? '#dc2626' : '#16a34a'}">
-              <span>Balance Due</span><span>${fmtAmt(invoice.balance_due)}</span>
-            </div>` : ''}
-          </div>
+            <tr>
+              <td style="padding:4px 16px 4px 0;color:#16a34a;text-align:right">Amount Paid:</td>
+              <td style="padding:4px 0;text-align:right;color:#16a34a;font-weight:600">${fmtAmt(invoice.amount_paid)}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 16px 4px 0;font-weight:700;color:${parseFloat(invoice.balance_due) > 0 ? '#dc2626' : '#16a34a'};text-align:right">Balance Due:</td>
+              <td style="padding:4px 0;text-align:right;font-weight:700;color:${parseFloat(invoice.balance_due) > 0 ? '#dc2626' : '#16a34a'}">${fmtAmt(invoice.balance_due)}</td>
+            </tr>` : ''}
+          </table>
         </div>
 
         ${invoice.notes ? `
-        <!-- Notes -->
-        <div style="background:#fffbf0;border-left:4px solid #C8921A;border-radius:0 6px 6px 0;padding:12px 16px;margin-bottom:24px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px;font-weight:700">Payment Instructions</div>
-          <div style="font-size:12px;color:#555;line-height:1.7;white-space:pre-wrap">${invoice.notes}</div>
+        <!-- Notes / Payment Instructions -->
+        <div style="margin-bottom:20px;font-size:12px;color:#444;line-height:1.7">
+          <span style="font-weight:700">Payment Instructions:</span> ${invoice.notes}
         </div>` : ''}
 
         ${payRows ? `
-        <!-- Payments received -->
-        <div style="margin-bottom:24px">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:8px;font-weight:700">Payments Received</div>
+        <!-- Payments Received -->
+        <div style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:1px;margin-bottom:6px">Payments Received</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead>
               <tr style="background:#f5f5f5">
-                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Date</th>
-                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Method</th>
-                <th style="padding:8px;text-align:left;font-weight:600;color:#555">Reference</th>
-                <th style="padding:8px;text-align:right;font-weight:600;color:#555">Amount</th>
+                <th style="padding:7px 8px;text-align:left;font-weight:600;color:#555">Date</th>
+                <th style="padding:7px 8px;text-align:left;font-weight:600;color:#555">Method</th>
+                <th style="padding:7px 8px;text-align:left;font-weight:600;color:#555">Reference</th>
+                <th style="padding:7px 8px;text-align:right;font-weight:600;color:#555">Amount</th>
               </tr>
             </thead>
             <tbody>${payRows}</tbody>
           </table>
         </div>` : ''}
 
-        <!-- Footer -->
-        <div style="border-top:2px solid #e5e7eb;margin-top:32px;padding-top:16px;display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="font-size:11px;color:#666;line-height:1.8">
-            <div style="font-weight:700;color:#003366;font-size:12px">Now Travel and Tours Limited</div>
-            <div>6 Tombia Street, GRA Phase 2, Port Harcourt, Rivers State</div>
-            <div>admin@nowtravelandtours.com &nbsp;|&nbsp; +234 818 290 2621</div>
-            <div>nowtravelandtours.com</div>
+        <!-- ── AMOUNT IN WORDS ── -->
+        <div style="margin-bottom:32px;font-size:12px;color:#222">
+          <strong>Amount in Words:</strong> ${amountToWords(totalAmt)}
+        </div>
+
+        <!-- ── SIGNATURE LINES ── -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px">
+          <div style="text-align:center;min-width:240px">
+            <div style="border-top:1.5px solid #333;padding-top:6px;font-size:12px;font-weight:700;color:#003366">Vendor Signature</div>
           </div>
-          <div style="font-size:10px;color:#aaa;text-align:right;line-height:1.8;max-width:220px">
-            <div>IATA &amp; NANTA Certified</div>
-            <div>Thank you for your business!</div>
-            <div style="margin-top:4px;font-family:monospace">${invoice.invoice_number}</div>
+          <div style="text-align:center;min-width:180px">
+            <div style="margin-bottom:6px;font-size:12px;color:#333">${fmtD(invoice.created_at)}</div>
+            <div style="border-top:1.5px solid #333;padding-top:6px;font-size:12px;font-weight:700;color:#003366">Date</div>
           </div>
         </div>
+
       </div>
     </body></html>`;
 

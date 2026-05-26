@@ -3,11 +3,17 @@
  *
  * Staff authenticate via MSAL in the frontend. The acquired access token
  * is sent as  Authorization: Bearer <token>  on every API request.
- * This middleware validates the token against Entra ID's public JWKS endpoint.
+ * This middleware validates the token against Entra ID's public JWKS endpoint,
+ * then looks up the staff record in the DB to get their role and internal ID.
+ *
+ * Role source: the staff table (not Entra ID App Roles). This means
+ * any authenticated @flynowtravels.com user with a staff record can log in
+ * without requiring Azure App Role assignments per user.
  */
 const jwt    = require('jsonwebtoken');
 const jwksRsa = require('jwks-rsa');
 const logger  = require('../config/logger');
+const { query } = require('../config/database');
 
 const TENANT_ID = process.env.AZURE_TENANT_ID;
 const AUDIENCE  = process.env.JWT_AUDIENCE; // api://your-backend-app-client-id
@@ -28,8 +34,8 @@ function getSigningKey(header, callback) {
 }
 
 /**
- * Middleware: authenticate — validates the Entra ID bearer token.
- * Attaches decoded token payload to req.user on success.
+ * Middleware: authenticate — validates the Entra ID bearer token,
+ * then enriches req.user with role and dbId from the staff table.
  */
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -50,9 +56,8 @@ function authenticate(req, res, next) {
       ],
       algorithms: ['RS256'],
     },
-    (err, decoded) => {
+    async (err, decoded) => {
       if (err) {
-        // Decode without verification so we can log the actual audience & issuer
         const raw = jwt.decode(token, { complete: true });
         logger.warn('Token validation failed', {
           jwtError:    err.name,
@@ -65,15 +70,40 @@ function authenticate(req, res, next) {
         return res.status(401).json({ error: 'Invalid or expired token', detail: err.message });
       }
 
-      // Attach user info extracted from the token
-      req.user = {
-        oid:   decoded.oid,            // Entra ID object ID (stable unique identifier)
-        email: decoded.preferred_username || decoded.upn || decoded.email,
-        name:  decoded.name,
-        roles: decoded.roles || [],    // App roles assigned in Entra ID
-      };
+      try {
+        // Look up staff record by Entra OID — this is the source of truth for role
+        const staffRes = await query(
+          'SELECT id, role, is_active FROM staff WHERE entra_oid = $1',
+          [decoded.oid]
+        );
 
-      next();
+        if (!staffRes.rows.length) {
+          logger.warn('Authenticated user has no staff record', { oid: decoded.oid, email: decoded.preferred_username });
+          return res.status(403).json({
+            error: 'Your account is not set up in the BMS yet. Please contact your administrator.',
+          });
+        }
+
+        const staff = staffRes.rows[0];
+
+        if (!staff.is_active) {
+          return res.status(403).json({ error: 'Your account has been deactivated. Please contact your administrator.' });
+        }
+
+        // Attach user info — roles come from DB, not JWT claims
+        req.user = {
+          oid:   decoded.oid,
+          email: decoded.preferred_username || decoded.upn || decoded.email,
+          name:  decoded.name,
+          roles: [staff.role],   // e.g. ['BMS.Sales'], ['BMS.Admin']
+          dbId:  staff.id,       // internal UUID used by controllers for created_by / audit
+        };
+
+        next();
+      } catch (dbErr) {
+        logger.error('DB lookup failed in authenticate middleware', { error: dbErr.message });
+        next(dbErr);
+      }
     }
   );
 }
