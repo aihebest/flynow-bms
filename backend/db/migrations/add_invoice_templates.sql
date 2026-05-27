@@ -3,7 +3,14 @@
 -- and extends invoice_number to support NTT/CLIENT/PS424-2026 format
 
 -- 1. Extend invoice_number column (was VARCHAR(20), NTT/NLNG/PS434-2026 = 18 chars; room to grow)
+-- Drop trigger first — PostgreSQL blocks ALTER TYPE on columns used in trigger WHEN clauses
+DROP TRIGGER IF EXISTS trg_invoice_number ON invoices;
 ALTER TABLE invoices ALTER COLUMN invoice_number TYPE VARCHAR(60);
+-- Recreate the trigger
+CREATE TRIGGER trg_invoice_number
+    BEFORE INSERT ON invoices
+    FOR EACH ROW WHEN (NEW.invoice_number IS NULL OR NEW.invoice_number = '')
+    EXECUTE FUNCTION generate_invoice_number();
 
 -- 2. Add template and calculation fields
 ALTER TABLE invoices
