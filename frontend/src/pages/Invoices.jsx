@@ -185,34 +185,27 @@ function InvoiceList({ onNew, onSelect }) {
   );
 }
 
-// ─── Line Item Row ────────────────────────────────────────────────────────────
+// ─── Ad-hoc line item row (description + amount only) ────────────────────────
 
-function LineItemRow({ item, index, onChange, onRemove, currency }) {
-  const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
+function AdhocLineRow({ item, index, currency, onChange, onRemove }) {
   const sym = CURRENCY_SYM[currency] || '';
+  const iCls = "w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
   return (
     <tr>
       <td className="py-2 pr-2">
         <input type="text" placeholder="Description of service..."
           value={item.description}
           onChange={e => onChange(index, 'description', e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20" />
+          className={iCls} />
       </td>
-      <td className="py-2 px-2 w-20">
-        <input type="number" min="1" value={item.quantity}
-          onChange={e => onChange(index, 'quantity', e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#003366]/20" />
-      </td>
-      <td className="py-2 px-2 w-36">
+      <td className="py-2 w-36">
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">{sym}</span>
-          <input type="number" min="0" step="0.01" placeholder="0.00" value={item.unit_price}
-            onChange={e => onChange(index, 'unit_price', e.target.value)}
+          <input type="number" min="0" step="0.01" placeholder="0.00"
+            value={item.amount}
+            onChange={e => onChange(index, 'amount', e.target.value)}
             className="w-full border border-gray-200 rounded-lg pl-6 pr-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#003366]/20" />
         </div>
-      </td>
-      <td className="py-2 pl-2 w-32 text-right font-medium text-gray-700 text-sm">
-        {lineTotal > 0 ? sym + lineTotal.toLocaleString('en-NG', { minimumFractionDigits: 2 }) : '—'}
       </td>
       <td className="py-2 pl-2 w-10">
         <button type="button" onClick={() => onRemove(index)} className="text-gray-300 hover:text-red-400 transition-colors">
@@ -225,56 +218,108 @@ function LineItemRow({ item, index, onChange, onRemove, currency }) {
 
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
 
+const OVERHEAD_RATE      = 7.5;   // % of Personnel Salary
+const CONTRACT_PROFIT_R  = 7.5;   // % of Subtotal (Template A)
+const ADHOC_PROFIT_R     = 12;    // % of Base Amount (Template B)
+const VAT_RATE_ON_PROFIT = 7.5;   // % of Profit only (both templates)
+
+function CalcRow({ label, value, currency, bold, blue, border }) {
+  const sym = CURRENCY_SYM[currency] || '';
+  return (
+    <div className={`flex justify-between text-sm ${border ? 'border-t border-gray-200 pt-2 mt-1' : ''} ${bold ? 'font-bold' : ''} ${blue ? 'text-[#003366]' : 'text-gray-600'}`}>
+      <span>{label}</span>
+      <span>{sym}{(parseFloat(value) || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
+    </div>
+  );
+}
+
 function InvoiceForm({ invoice, onSave, onCancel }) {
-  const isEdit = !!invoice;
-  const [custSearch, setCustSearch] = useState(invoice ? `${invoice.first_name} ${invoice.last_name}` : '');
-  const [saving, setSaving] = useState(false);
+  const [template, setTemplate]     = useState('adhoc');
+  const [custSearch, setCustSearch] = useState('');
+  const [saving, setSaving]         = useState(false);
 
   const [form, setForm] = useState({
-    customer_id:     invoice?.customer_id     || '',
-    currency:        invoice?.currency        || 'NGN',
-    vat_rate:        invoice?.vat_rate        ?? 7.5,
-    discount_amount: invoice?.discount_amount || 0,
-    due_date:        invoice?.due_date        ? invoice.due_date.slice(0, 10) : '',
-    notes:           invoice?.notes           || '',
+    customer_id:     '',
+    invoice_number:  '',
+    currency:        'NGN',
+    due_date:        '',
+    notes:           '',
+    bill_to_name:    '',
+    bill_to_address: '',
   });
-
-  const [lineItems, setLineItems] = useState(
-    invoice ? [] : [{ description: '', quantity: 1, unit_price: '' }]
-  );
-
-  const updateLineItem = (i, field, value) => {
-    setLineItems(items => items.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
-  };
-  const addLineItem    = ()  => setLineItems(items => [...items, { description: '', quantity: 1, unit_price: '' }]);
-  const removeLineItem = (i) => setLineItems(items => items.filter((_, idx) => idx !== i));
-
-  // Computed totals
-  const subtotal  = lineItems.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
-  const vatAmount = subtotal * (parseFloat(form.vat_rate) || 0) / 100;
-  const discount  = parseFloat(form.discount_amount) || 0;
-  const total     = subtotal + vatAmount - discount;
-
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
   const sym = CURRENCY_SYM[form.currency] || '';
 
-  const handleSubmit = async (e) => {
+  // ── Template A (Contract) ──
+  const [salary, setSalary]       = useState('');
+  const [consum, setConsum]       = useState('');
+  const salaryN   = parseFloat(salary) || 0;
+  const consumN   = parseFloat(consum) || 0;
+  const overheadA = salaryN * OVERHEAD_RATE / 100;
+  const subA      = salaryN + consumN + overheadA;
+  const profitA   = subA  * CONTRACT_PROFIT_R / 100;
+  const vatA      = profitA * VAT_RATE_ON_PROFIT / 100;
+  const totalA    = subA + profitA + vatA;
+
+  // ── Template B (Ad-hoc) ──
+  const [lines, setLines] = useState([{ description: '', amount: '' }]);
+  const updateLine = (i, f, v) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [f]: v } : l));
+  const addLine    = () => setLines(ls => [...ls, { description: '', amount: '' }]);
+  const removeLine = (i) => setLines(ls => ls.filter((_, idx) => idx !== i));
+  const subB   = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const profitB = subB  * ADHOC_PROFIT_R / 100;
+  const vatB    = profitB * VAT_RATE_ON_PROFIT / 100;
+  const totalB  = subB + profitB + vatB;
+
+  // Active values
+  const isContract  = template === 'contract';
+  const subtotal    = isContract ? subA    : subB;
+  const profit      = isContract ? profitA : profitB;
+  const profitRate  = isContract ? CONTRACT_PROFIT_R : ADHOC_PROFIT_R;
+  const vat         = isContract ? vatA    : vatB;
+  const grandTotal  = isContract ? totalA  : totalB;
+
+  async function handleSubmit(e) {
     e.preventDefault();
     if (!form.customer_id) { toast.error('Please select a customer'); return; }
-    if (lineItems.length === 0 || !lineItems.some(i => i.description)) {
-      toast.error('Add at least one line item'); return;
+    if (isContract && salaryN <= 0) { toast.error('Enter the Personnel Salary amount'); return; }
+    if (!isContract && !lines.some(l => l.description && parseFloat(l.amount) > 0)) {
+      toast.error('Add at least one line item with description and amount'); return;
     }
-    if (total <= 0) { toast.error('Total must be greater than zero'); return; }
+    if (grandTotal <= 0) { toast.error('Grand Total must be greater than zero'); return; }
+
     setSaving(true);
     try {
       const payload = {
         ...form,
+        template_type:  template,
         subtotal,
-        vat_amount: vatAmount,
-        total_amount: total,
-        line_items: lineItems.filter(i => i.description && i.unit_price),
+        profit_rate:    profitRate,
+        profit_amount:  profit,
+        vat_rate:       VAT_RATE_ON_PROFIT,
+        vat_amount:     vat,
+        total_amount:   grandTotal,
+        discount_amount: 0,
       };
-      if (!payload.due_date) delete payload.due_date;
+      if (!payload.invoice_number) delete payload.invoice_number;
+      if (!payload.due_date)       delete payload.due_date;
+
+      if (isContract) {
+        payload.personnel_salary = salaryN;
+        payload.consumables      = consumN;
+        payload.overhead_amount  = overheadA;
+        payload.line_items = [
+          { description: 'Reimbursable Protocol Personnel Salary', quantity: 1, unit_price: salaryN },
+          ...(consumN > 0 ? [{ description: 'Consumable', quantity: 1, unit_price: consumN }] : []),
+          { description: `Overhead Cost (${OVERHEAD_RATE}% of Personnel cost)`, quantity: 1, unit_price: overheadA },
+        ];
+      } else {
+        payload.line_items = lines
+          .filter(l => l.description && parseFloat(l.amount) > 0)
+          .map(l => ({ description: l.description, quantity: 1, unit_price: parseFloat(l.amount) }));
+      }
+
       await invoicesApi.create(payload);
       toast.success('Invoice created');
       onSave();
@@ -283,9 +328,7 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
     } finally {
       setSaving(false);
     }
-  };
-
-  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
+  }
 
   return (
     <div className="space-y-4">
@@ -297,24 +340,47 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Customer & Settings */}
+
+        {/* Template Selector */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <h2 className="font-semibold text-gray-700 mb-3">Invoice Type</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { key: 'contract', label: 'Template A — Contract', sub: 'Salary + Consumables + Overhead', calc: `7.5% Overhead → 7.5% Profit → 7.5% VAT on Profit` },
+              { key: 'adhoc',   label: 'Template B — Ad-hoc',   sub: 'Third-party / External vendor',   calc: `12% Profit → 7.5% VAT on Profit` },
+            ].map(({ key, label, sub, calc }) => (
+              <button key={key} type="button" onClick={() => setTemplate(key)}
+                className={`text-left py-3 px-4 rounded-xl border-2 transition-all ${
+                  template === key
+                    ? 'border-[#003366] bg-[#003366]/5 text-[#003366]'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}>
+                <div className="font-bold text-sm">{label}</div>
+                <div className="text-xs mt-0.5 opacity-70">{sub}</div>
+                <div className="text-xs mt-1 opacity-50 font-mono">{calc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Invoice Details */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
           <h2 className="font-semibold text-gray-700 flex items-center gap-2">
             <FileText className="w-4 h-4 text-[#003366]" /> Invoice Details
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-1">
-              <Field label="Customer" required>
-                <CustomerSearch
-                  value={custSearch}
-                  customerId={form.customer_id}
-                  onChange={text => { setCustSearch(text); setForm(f => ({ ...f, customer_id: '' })); }}
-                  onSelect={c => { setForm(f => ({ ...f, customer_id: c.id })); setCustSearch(`${c.first_name} ${c.last_name}`); }}
-                  inputClassName={inputCls}
-                  placeholder="Search or add customer..."
-                />
-              </Field>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Customer" required>
+              <CustomerSearch
+                value={custSearch} customerId={form.customer_id}
+                onChange={t => { setCustSearch(t); setForm(f => ({ ...f, customer_id: '' })); }}
+                onSelect={c => { setForm(f => ({ ...f, customer_id: c.id })); setCustSearch(`${c.first_name} ${c.last_name}`); }}
+                inputClassName={inputCls} placeholder="Search or add customer..."
+              />
+            </Field>
+            <Field label="Invoice Number">
+              <input type="text" placeholder="e.g. NTT/NLNG/PS435-2026  (blank = auto-generate)"
+                value={form.invoice_number} onChange={e => set('invoice_number', e.target.value)} className={inputCls} />
+            </Field>
             <Field label="Currency">
               <select value={form.currency} onChange={e => set('currency', e.target.value)} className={inputCls}>
                 {CURRENCIES.map(c => <option key={c}>{c}</option>)}
@@ -324,71 +390,95 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
               <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} className={inputCls} />
             </Field>
           </div>
-        </div>
-
-        {/* Line Items */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
-          <h2 className="font-semibold text-gray-700 flex items-center gap-2">
-            <Banknote className="w-4 h-4 text-[#003366]" /> Line Items
-          </h2>
-          <table className="w-full">
-            <thead>
-              <tr className="text-xs text-gray-500 border-b border-gray-100">
-                <th className="text-left pb-2 font-medium">Description</th>
-                <th className="text-center pb-2 font-medium w-20">Qty</th>
-                <th className="text-right pb-2 font-medium w-36">Unit Price</th>
-                <th className="text-right pb-2 font-medium w-32">Total</th>
-                <th className="w-10" />
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item, i) => (
-                <LineItemRow key={i} item={item} index={i} currency={form.currency}
-                  onChange={updateLineItem} onRemove={removeLineItem} />
-              ))}
-            </tbody>
-          </table>
-          <button type="button" onClick={addLineItem}
-            className="flex items-center gap-1.5 text-sm text-[#003366] hover:text-[#002244] transition-colors">
-            <PlusCircle className="w-4 h-4" /> Add line item
-          </button>
-
-          {/* Totals */}
-          <div className="border-t border-gray-100 pt-3 ml-auto w-full md:w-72 space-y-1.5">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>Subtotal</span>
-              <span className="font-medium">{sym}{subtotal.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <span>VAT</span>
-                <input type="number" min="0" max="30" step="0.5" value={form.vat_rate}
-                  onChange={e => set('vat_rate', e.target.value)}
-                  className="w-14 border border-gray-200 rounded px-2 py-0.5 text-xs text-center focus:outline-none" />
-                <span className="text-xs">%</span>
-              </div>
-              <span>{sym}{vatAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <span>Discount</span>
-                <input type="number" min="0" step="0.01" value={form.discount_amount}
-                  onChange={e => set('discount_amount', e.target.value)}
-                  className="w-24 border border-gray-200 rounded px-2 py-0.5 text-xs text-right focus:outline-none" />
-              </div>
-              <span className="text-red-500">-{sym}{(parseFloat(form.discount_amount) || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-base font-bold text-[#003366] border-t border-gray-200 pt-2 mt-2">
-              <span>Total</span>
-              <span>{sym}{total.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Bill To (Name / Title)">
+              <input type="text" placeholder="e.g. Financial Controller, Nigerian LNG Limited"
+                value={form.bill_to_name} onChange={e => set('bill_to_name', e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Bill To (Address)">
+              <input type="text" placeholder="e.g. NLNG Road, Off Eastern By-Pass, Port Harcourt"
+                value={form.bill_to_address} onChange={e => set('bill_to_address', e.target.value)} className={inputCls} />
+            </Field>
           </div>
         </div>
 
+        {/* Template A: Contract */}
+        {isContract && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
+            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-[#003366]" /> Contract Line Items
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Personnel Salary" required>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">{sym}</span>
+                  <input type="number" min="0" step="0.01" placeholder="0.00"
+                    value={salary} onChange={e => setSalary(e.target.value)}
+                    className={`${inputCls} pl-7`} />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Reimbursable Protocol Personnel Salary</p>
+              </Field>
+              <Field label="Consumables">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">{sym}</span>
+                  <input type="number" min="0" step="0.01" placeholder="0.00"
+                    value={consum} onChange={e => setConsum(e.target.value)}
+                    className={`${inputCls} pl-7`} />
+                </div>
+              </Field>
+            </div>
+            <div className="bg-blue-50/50 rounded-xl p-4 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Live Calculation</p>
+              <CalcRow label="1. Personnel Salary" value={salaryN} currency={form.currency} />
+              <CalcRow label="2. Consumables"      value={consumN} currency={form.currency} />
+              <CalcRow label={`3. Overhead Cost (${OVERHEAD_RATE}% of Personnel)`} value={overheadA} currency={form.currency} />
+              <CalcRow label="Subtotal" value={subA} currency={form.currency} bold border />
+              <CalcRow label={`Profit (${CONTRACT_PROFIT_R}% of Subtotal)`} value={profitA} currency={form.currency} />
+              <CalcRow label={`${VAT_RATE_ON_PROFIT}% VAT (on Profit only)`} value={vatA} currency={form.currency} />
+              <CalcRow label="Grand Total" value={totalA} currency={form.currency} bold blue border />
+            </div>
+          </div>
+        )}
+
+        {/* Template B: Ad-hoc */}
+        {!isContract && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-3">
+            <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-[#003366]" /> Line Items
+            </h2>
+            <table className="w-full">
+              <thead>
+                <tr className="text-xs text-gray-500 border-b border-gray-100">
+                  <th className="text-left pb-2 font-medium">Description</th>
+                  <th className="text-right pb-2 font-medium w-36">Amount</th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <AdhocLineRow key={i} item={l} index={i} currency={form.currency}
+                    onChange={updateLine} onRemove={removeLine} />
+                ))}
+              </tbody>
+            </table>
+            <button type="button" onClick={addLine}
+              className="flex items-center gap-1.5 text-sm text-[#003366] hover:text-[#002244] transition-colors">
+              <PlusCircle className="w-4 h-4" /> Add line item
+            </button>
+            <div className="bg-blue-50/50 rounded-xl p-4 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Live Calculation</p>
+              <CalcRow label="Base Amount (Subtotal)" value={subB} currency={form.currency} bold />
+              <CalcRow label={`Profit (${ADHOC_PROFIT_R}% of Base)`} value={profitB} currency={form.currency} />
+              <CalcRow label={`${VAT_RATE_ON_PROFIT}% VAT (on Profit only)`} value={vatB} currency={form.currency} />
+              <CalcRow label="Grand Total" value={totalB} currency={form.currency} bold blue border />
+            </div>
+          </div>
+        )}
+
         {/* Notes */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-700 mb-3">Notes</h2>
-          <textarea rows={3} placeholder="Payment instructions, bank details, terms..."
+          <h2 className="font-semibold text-gray-700 mb-3">Notes / Payment Instructions</h2>
+          <textarea rows={3} placeholder="Bank details, payment terms, work order reference..."
             value={form.notes} onChange={e => set('notes', e.target.value)}
             className={`${inputCls} resize-none`} />
         </div>
@@ -622,10 +712,14 @@ function InvoiceDetail({ invoice: initial, onBack }) {
         <div style="margin-bottom:20px">
           <div style="background:#003366;color:#fff;font-size:11px;font-weight:700;padding:5px 10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:0">BILL TO</div>
           <div style="border:1px solid #003366;border-top:none;padding:10px 12px;font-size:12px;line-height:1.8;color:#333">
-            <div style="font-weight:700;font-size:13px;color:#003366">${invoice.first_name} ${invoice.last_name}</div>
-            ${invoice.company_name ? `<div>${invoice.company_name}</div>` : ''}
-            ${invoice.email ? `<div>${invoice.email}</div>` : ''}
-            ${invoice.phone ? `<div>${invoice.phone}</div>` : ''}
+            ${invoice.bill_to_name
+              ? `<div style="font-weight:700;font-size:13px;color:#003366">${invoice.bill_to_name}</div>`
+              : `<div style="font-weight:700;font-size:13px;color:#003366">${invoice.first_name} ${invoice.last_name}</div>
+                 ${invoice.company_name ? `<div>${invoice.company_name}</div>` : ''}
+                 ${invoice.email ? `<div>${invoice.email}</div>` : ''}
+                 ${invoice.phone ? `<div>${invoice.phone}</div>` : ''}`
+            }
+            ${invoice.bill_to_address ? `<div style="margin-top:2px">${invoice.bill_to_address}</div>` : ''}
           </div>
         </div>
 
@@ -653,9 +747,14 @@ function InvoiceDetail({ invoice: initial, onBack }) {
               <td style="padding:5px 16px 5px 0;color:#555;text-align:right">Discount:</td>
               <td style="padding:5px 0;text-align:right;color:#dc2626;font-weight:600">-${fmtAmt(invoice.discount_amount)}</td>
             </tr>` : ''}
-            ${parseFloat(invoice.vat_rate) > 0 ? `
+            ${parseFloat(invoice.profit_amount) > 0 ? `
             <tr>
-              <td style="padding:5px 16px 5px 0;color:#003366;font-weight:700;text-align:right">${invoice.vat_rate}% VAT:</td>
+              <td style="padding:5px 16px 5px 0;color:#555;text-align:right">Profit (${invoice.profit_rate || ''}%):</td>
+              <td style="padding:5px 0;text-align:right;color:#555">${fmtAmt(invoice.profit_amount)}</td>
+            </tr>` : ''}
+            ${parseFloat(invoice.vat_amount) > 0 ? `
+            <tr>
+              <td style="padding:5px 16px 5px 0;color:#003366;font-weight:700;text-align:right">7.5% VAT (on Profit):</td>
               <td style="padding:5px 0;text-align:right;font-weight:700;color:#003366">${fmtAmt(invoice.vat_amount)}</td>
             </tr>` : ''}
             <tr>
@@ -913,14 +1012,21 @@ function InvoiceDetail({ invoice: initial, onBack }) {
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
               </div>
-              {parseFloat(invoice.vat_rate) > 0 && (
-                <div className="flex justify-between text-gray-600">
-                  <span>VAT ({invoice.vat_rate}%)</span><span>{fmt(invoice.vat_amount, invoice.currency)}</span>
-                </div>
-              )}
               {parseFloat(invoice.discount_amount) > 0 && (
                 <div className="flex justify-between text-gray-600">
                   <span>Discount</span><span className="text-red-500">-{fmt(invoice.discount_amount, invoice.currency)}</span>
+                </div>
+              )}
+              {parseFloat(invoice.profit_amount) > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Profit ({invoice.profit_rate}%)</span>
+                  <span>{fmt(invoice.profit_amount, invoice.currency)}</span>
+                </div>
+              )}
+              {parseFloat(invoice.vat_amount) > 0 && (
+                <div className="flex justify-between text-[#003366] font-semibold">
+                  <span>7.5% VAT (on Profit)</span>
+                  <span>{fmt(invoice.vat_amount, invoice.currency)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-[#003366] border-t border-gray-200 pt-2 text-base">

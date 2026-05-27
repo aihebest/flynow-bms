@@ -88,7 +88,7 @@ CREATE TABLE customers (
     first_name          VARCHAR(100)    NOT NULL,
     last_name           VARCHAR(100)    NOT NULL,
     email               VARCHAR(200)    UNIQUE,
-    phone               VARCHAR(30)     NOT NULL,
+    phone               VARCHAR(30),
     whatsapp            VARCHAR(30),
     customer_type       customer_type   NOT NULL DEFAULT 'Individual',
     -- Corporate link

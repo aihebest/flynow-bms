@@ -58,25 +58,43 @@ async function create(req, res, next) {
   try {
     const {
       customer_id, booking_id, visa_id,
-      subtotal, vat_rate = 7.5, discount_amount = 0, total_amount,
+      invoice_number: manualNum,
+      template_type = 'adhoc',
+      personnel_salary, consumables, overhead_amount,
+      profit_rate, profit_amount,
+      subtotal, vat_rate = 7.5, vat_amount,
+      discount_amount = 0, total_amount,
       currency = 'NGN', due_date, notes, line_items = [],
+      bill_to_name, bill_to_address,
     } = req.body;
 
     if (!customer_id || !total_amount) {
       return res.status(400).json({ error: 'customer_id and total_amount are required' });
     }
 
-    const vat_amount = (subtotal || total_amount) * (vat_rate / 100);
-
     const r = await query(`
-      INSERT INTO invoices (customer_id, booking_id, visa_id, subtotal, vat_rate, vat_amount,
-        discount_amount, total_amount, currency, due_date, notes, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      INSERT INTO invoices (
+        customer_id, booking_id, visa_id,
+        invoice_number, template_type,
+        personnel_salary, consumables, overhead_amount,
+        profit_rate, profit_amount,
+        subtotal, vat_rate, vat_amount,
+        discount_amount, total_amount, currency, due_date, notes,
+        bill_to_name, bill_to_address, created_by
+      ) VALUES (
+        $1,$2,$3, $4,$5, $6,$7,$8, $9,$10,
+        $11,$12,$13, $14,$15,$16,$17,$18, $19,$20,$21
+      )
       RETURNING *
     `, [
       customer_id, booking_id || null, visa_id || null,
-      subtotal || total_amount, vat_rate, vat_amount,
-      discount_amount, total_amount, currency, due_date || null, notes || null, null,
+      manualNum || null,   // null → DB trigger generates fallback FNI-YYYY-NNNNN
+      template_type,
+      personnel_salary || null, consumables || null, overhead_amount || null,
+      profit_rate || null, profit_amount || null,
+      subtotal || total_amount, vat_rate, vat_amount || 0,
+      discount_amount, total_amount, currency, due_date || null, notes || null,
+      bill_to_name || null, bill_to_address || null, req.user?.dbId || null,
     ]);
 
     const invoice = r.rows[0];
@@ -85,8 +103,10 @@ async function create(req, res, next) {
       await query(`
         INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price)
         VALUES ($1,$2,$3,$4)
-      `, [invoice.id, item.description, item.quantity || 1, item.unit_price]);
+      `, [invoice.id, item.description, item.quantity || 1, item.unit_price || 0]);
     }
+
+    logger.info(`Invoice ${invoice.invoice_number} created (${template_type}) by ${req.user?.email}`);
 
     res.status(201).json({ invoice });
   } catch (err) { next(err); }
