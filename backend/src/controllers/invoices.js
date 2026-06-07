@@ -437,17 +437,4 @@ async function syncToZoho(req, res, next) {
   }
 }
 
-// ─── ONE-TIME Admin: Clear all invoices ───────────────────────────────────────
-
-async function clearAll(req, res, next) {
-  try {
-    const result = await query('DELETE FROM invoices');
-    await query("SELECT setval('invoice_seq', 1, false)");
-    logger.info(`Admin clearAll: deleted ${result.rowCount} invoices by ${req.user?.email}`);
-    res.json({ success: true, deleted: result.rowCount });
-  } catch (err) {
-    next(err);
-  }
-}
-
-module.exports = { list, getById, create, update, send, recordPayment, syncToZoho, clearAll };
+module.exports = { list, getById, create, update, send, recordPayment, syncToZoho };

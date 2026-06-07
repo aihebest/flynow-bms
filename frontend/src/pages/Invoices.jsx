@@ -258,7 +258,7 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
   const consumN   = parseFloat(consum) || 0;
   const overheadA = salaryN * OVERHEAD_RATE / 100;
   const subA      = salaryN + consumN + overheadA;
-  const profitA   = subA  * CONTRACT_PROFIT_R / 100;
+  const profitA   = salaryN * CONTRACT_PROFIT_R / 100;   // same base as overhead: Personnel Salary only
   const vatA      = profitA * VAT_RATE_ON_PROFIT / 100;
   const totalA    = subA + profitA + vatA;
 
@@ -433,7 +433,7 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
               <CalcRow label="2. Consumables"      value={consumN} currency={form.currency} />
               <CalcRow label={`3. Overhead Cost (${OVERHEAD_RATE}% of Personnel)`} value={overheadA} currency={form.currency} />
               <CalcRow label="Subtotal" value={subA} currency={form.currency} bold border />
-              <CalcRow label={`Profit (${CONTRACT_PROFIT_R}% of Subtotal)`} value={profitA} currency={form.currency} />
+              <CalcRow label={`Profit (${CONTRACT_PROFIT_R}% of Personnel Salary)`} value={profitA} currency={form.currency} />
               <CalcRow label={`${VAT_RATE_ON_PROFIT}% VAT (on Profit only)`} value={vatA} currency={form.currency} />
               <CalcRow label="Grand Total" value={totalA} currency={form.currency} bold blue border />
             </div>

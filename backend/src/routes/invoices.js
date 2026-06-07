@@ -16,7 +16,5 @@ router.post('/:id/payments', requireRole(ROLES.FINANCE, ROLES.MANAGER, ROLES.ADM
 // Sync invoice to Zoho Books
 router.post('/:id/sync-zoho', requireRole(ROLES.FINANCE, ROLES.ADMIN), ctrl.syncToZoho);
 
-// ⚠️  ONE-TIME admin utility: delete all invoices (Admin only)
-router.post('/all/clear', requireRole(ROLES.ADMIN), ctrl.clearAll);
 
 module.exports = router;
