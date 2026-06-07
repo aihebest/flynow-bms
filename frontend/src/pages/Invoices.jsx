@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   FileText, Plus, Search, ChevronLeft, ChevronRight,
   Banknote, CreditCard,
-  CheckCircle2, XCircle, PlusCircle, Send, RefreshCw, ExternalLink, Trash2, Printer,
+  CheckCircle2, XCircle, PlusCircle, Send, RefreshCw, ExternalLink, Trash2, Printer, Pencil, User,
 } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -233,27 +233,32 @@ function CalcRow({ label, value, currency, bold, blue, border }) {
   );
 }
 
-function InvoiceForm({ invoice, onSave, onCancel }) {
-  const [template, setTemplate]     = useState('adhoc');
-  const [custSearch, setCustSearch] = useState('');
-  const [saving, setSaving]         = useState(false);
+function InvoiceForm({ invoice, lineItems: existingLines, onSave, onCancel }) {
+  const isEdit = !!invoice;
+
+  // Pre-populate template from existing invoice
+  const [template, setTemplate] = useState(invoice?.template_type || 'adhoc');
+  const [custSearch, setCustSearch] = useState(
+    invoice ? `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() : ''
+  );
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    customer_id:     '',
-    invoice_number:  '',
-    currency:        'NGN',
-    due_date:        '',
-    notes:           '',
-    bill_to_name:    '',
-    bill_to_address: '',
+    customer_id:     invoice?.customer_id    || '',
+    invoice_number:  invoice?.invoice_number || '',
+    currency:        invoice?.currency       || 'NGN',
+    due_date:        invoice?.due_date ? invoice.due_date.slice(0, 10) : '',
+    notes:           invoice?.notes          || '',
+    bill_to_name:    invoice?.bill_to_name   || '',
+    bill_to_address: invoice?.bill_to_address || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003366]/20";
   const sym = CURRENCY_SYM[form.currency] || '';
 
   // ── Template A (Contract) ──
-  const [salary, setSalary]       = useState('');
-  const [consum, setConsum]       = useState('');
+  const [salary, setSalary] = useState(invoice?.personnel_salary ? String(invoice.personnel_salary) : '');
+  const [consum, setConsum] = useState(invoice?.consumables ? String(invoice.consumables) : '');
   const salaryN   = parseFloat(salary) || 0;
   const consumN   = parseFloat(consum) || 0;
   const overheadA = salaryN * OVERHEAD_RATE / 100;
@@ -262,23 +267,28 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
   const vatA      = profitA * VAT_RATE_ON_PROFIT / 100;
   const totalA    = subA + profitA + vatA;
 
-  // ── Template B (Ad-hoc) ──
-  const [lines, setLines] = useState([{ description: '', amount: '' }]);
+  // ── Template B (Ad-hoc) — pre-populate from existing line items ──
+  const [lines, setLines] = useState(() => {
+    if (isEdit && existingLines?.length) {
+      return existingLines.map(l => ({ description: l.description, amount: String(l.unit_price) }));
+    }
+    return [{ description: '', amount: '' }];
+  });
   const updateLine = (i, f, v) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [f]: v } : l));
   const addLine    = () => setLines(ls => [...ls, { description: '', amount: '' }]);
   const removeLine = (i) => setLines(ls => ls.filter((_, idx) => idx !== i));
-  const subB   = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
-  const profitB = subB  * ADHOC_PROFIT_R / 100;
+  const subB    = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+  const profitB = subB * ADHOC_PROFIT_R / 100;
   const vatB    = profitB * VAT_RATE_ON_PROFIT / 100;
   const totalB  = subB + profitB + vatB;
 
   // Active values
-  const isContract  = template === 'contract';
-  const subtotal    = isContract ? subA    : subB;
-  const profit      = isContract ? profitA : profitB;
-  const profitRate  = isContract ? CONTRACT_PROFIT_R : ADHOC_PROFIT_R;
-  const vat         = isContract ? vatA    : vatB;
-  const grandTotal  = isContract ? totalA  : totalB;
+  const isContract = template === 'contract';
+  const subtotal   = isContract ? subA    : subB;
+  const profit     = isContract ? profitA : profitB;
+  const profitRate = isContract ? CONTRACT_PROFIT_R : ADHOC_PROFIT_R;
+  const vat        = isContract ? vatA    : vatB;
+  const grandTotal = isContract ? totalA  : totalB;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -293,13 +303,13 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
     try {
       const payload = {
         ...form,
-        template_type:  template,
+        template_type:   template,
         subtotal,
-        profit_rate:    profitRate,
-        profit_amount:  profit,
-        vat_rate:       VAT_RATE_ON_PROFIT,
-        vat_amount:     vat,
-        total_amount:   grandTotal,
+        profit_rate:     profitRate,
+        profit_amount:   profit,
+        vat_rate:        VAT_RATE_ON_PROFIT,
+        vat_amount:      vat,
+        total_amount:    grandTotal,
         discount_amount: 0,
       };
       if (!payload.invoice_number) delete payload.invoice_number;
@@ -320,11 +330,16 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
           .map(l => ({ description: l.description, quantity: 1, unit_price: parseFloat(l.amount) }));
       }
 
-      await invoicesApi.create(payload);
-      toast.success('Invoice created');
+      if (isEdit) {
+        await invoicesApi.update(invoice.id, payload);
+        toast.success('Invoice updated');
+      } else {
+        await invoicesApi.create(payload);
+        toast.success('Invoice created');
+      }
       onSave();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create invoice');
+      toast.error(err.response?.data?.error || (isEdit ? 'Failed to update invoice' : 'Failed to create invoice'));
     } finally {
       setSaving(false);
     }
@@ -336,7 +351,7 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
         <button onClick={onCancel} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <h1 className="text-2xl font-bold text-[#003366]">New Invoice</h1>
+        <h1 className="text-2xl font-bold text-[#003366]">{isEdit ? `Edit Invoice — ${invoice.invoice_number}` : 'New Invoice'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -486,7 +501,7 @@ function InvoiceForm({ invoice, onSave, onCancel }) {
         <div className="flex gap-3">
           <button type="submit" disabled={saving}
             className="bg-[#003366] text-white px-6 py-2.5 rounded-lg hover:bg-[#002244] transition-colors text-sm font-medium disabled:opacity-50">
-            {saving ? 'Creating…' : 'Create Invoice'}
+            {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Invoice')}
           </button>
           <button type="button" onClick={onCancel}
             className="px-6 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
@@ -580,7 +595,7 @@ function RecordPaymentModal({ invoice, onClose, onSuccess }) {
 
 // ─── Invoice Detail ───────────────────────────────────────────────────────────
 
-function InvoiceDetail({ invoice: initial, onBack }) {
+function InvoiceDetail({ invoice: initial, onBack, onEdit }) {
   const [invoice, setInvoice]   = useState(initial);
   const [lineItems, setLineItems] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -899,6 +914,14 @@ function InvoiceDetail({ invoice: initial, onBack }) {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {/* Edit Invoice */}
+          {!['Paid', 'Cancelled', 'Refunded'].includes(invoice.status) && (
+            <button onClick={() => onEdit(invoice, lineItems)}
+              className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors text-sm font-medium">
+              <Pencil className="w-4 h-4" /> Edit Invoice
+            </button>
+          )}
+
           {/* Print / Download PDF */}
           {!loading && (
             <button onClick={handlePrint}
@@ -962,6 +985,22 @@ function InvoiceDetail({ invoice: initial, onBack }) {
             <p className={`text-xl font-bold ${color}`}>{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Audit Trail */}
+      <div className="flex flex-wrap gap-4 text-xs text-gray-500 px-1">
+        {invoice.created_by_name && (
+          <span className="flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" />
+            <span>Created by <strong className="text-gray-700">{invoice.created_by_name}</strong> on {fmtDate(invoice.created_at)}</span>
+          </span>
+        )}
+        {invoice.updated_by_name && (
+          <span className="flex items-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5" />
+            <span>Last edited by <strong className="text-gray-700">{invoice.updated_by_name}</strong> on {fmtDate(invoice.updated_at)}</span>
+          </span>
+        )}
       </div>
 
       {/* Invoice Body */}
@@ -1080,17 +1119,21 @@ function InvoiceDetail({ invoice: initial, onBack }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Invoices() {
-  const [view, setView]       = useState('list');
+  const [view, setView]         = useState('list');
   const [selected, setSelected] = useState(null);
-  const [listKey, setListKey] = useState(0);
+  const [editLines, setEditLines] = useState([]);
+  const [listKey, setListKey]   = useState(0);
 
   const handleSelect  = (inv) => { setSelected(inv); setView('detail'); };
-  const handleNew     = ()    => { setSelected(null); setView('new'); };
+  const handleNew     = ()    => { setSelected(null); setEditLines([]); setView('new'); };
   const handleBack    = ()    => { setSelected(null); setView('list'); };
+  const handleEdit    = (inv, lines) => { setSelected(inv); setEditLines(lines); setView('edit'); };
   const handleSaved   = ()    => { setListKey(k => k + 1); setView('list'); setSelected(null); };
+  const handleEditSaved = () => { setView('detail'); };   // go back to detail after save
 
-  if (view === 'new')    return <InvoiceForm invoice={null} onSave={handleSaved} onCancel={handleBack} />;
-  if (view === 'detail') return <InvoiceDetail invoice={selected} onBack={handleBack} />;
+  if (view === 'new')    return <InvoiceForm invoice={null} lineItems={[]} onSave={handleSaved} onCancel={handleBack} />;
+  if (view === 'edit')   return <InvoiceForm invoice={selected} lineItems={editLines} onSave={handleEditSaved} onCancel={() => setView('detail')} />;
+  if (view === 'detail') return <InvoiceDetail invoice={selected} onBack={handleBack} onEdit={handleEdit} />;
 
   return <InvoiceList key={listKey} onNew={handleNew} onSelect={handleSelect} />;
 }

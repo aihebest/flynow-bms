@@ -41,8 +41,14 @@ async function list(req, res, next) {
 async function getById(req, res, next) {
   try {
     const inv = await query(`
-      SELECT i.*, c.first_name, c.last_name, c.email, c.phone
-      FROM invoices i JOIN customers c ON c.id = i.customer_id
+      SELECT i.*,
+             c.first_name, c.last_name, c.email, c.phone, c.company_name,
+             cb.first_name || ' ' || cb.last_name AS created_by_name,
+             ub.first_name || ' ' || ub.last_name AS updated_by_name
+      FROM invoices i
+      JOIN customers c ON c.id = i.customer_id
+      LEFT JOIN staff cb ON cb.id = i.created_by
+      LEFT JOIN staff ub ON ub.id = i.updated_by
       WHERE i.id = $1
     `, [req.params.id]);
     if (!inv.rows.length) return res.status(404).json({ error: 'Invoice not found' });
@@ -114,16 +120,65 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const f = req.body;
+    const {
+      invoice_number: manualNum,
+      template_type,
+      personnel_salary, consumables, overhead_amount,
+      profit_rate, profit_amount,
+      subtotal, vat_rate, vat_amount,
+      discount_amount, total_amount,
+      currency, due_date, notes,
+      bill_to_name, bill_to_address,
+      line_items,
+    } = req.body;
+
     const r = await query(`
       UPDATE invoices SET
-        due_date        = COALESCE($1, due_date),
-        notes           = COALESCE($2, notes),
-        discount_amount = COALESCE($3, discount_amount),
-        updated_at      = NOW()
-      WHERE id = $4 RETURNING *
-    `, [f.due_date, f.notes, f.discount_amount, req.params.id]);
+        invoice_number   = COALESCE($1,  invoice_number),
+        template_type    = COALESCE($2,  template_type),
+        personnel_salary = COALESCE($3,  personnel_salary),
+        consumables      = COALESCE($4,  consumables),
+        overhead_amount  = COALESCE($5,  overhead_amount),
+        profit_rate      = COALESCE($6,  profit_rate),
+        profit_amount    = COALESCE($7,  profit_amount),
+        subtotal         = COALESCE($8,  subtotal),
+        vat_rate         = COALESCE($9,  vat_rate),
+        vat_amount       = COALESCE($10, vat_amount),
+        discount_amount  = COALESCE($11, discount_amount),
+        total_amount     = COALESCE($12, total_amount),
+        currency         = COALESCE($13, currency),
+        due_date         = COALESCE($14, due_date),
+        notes            = COALESCE($15, notes),
+        bill_to_name     = COALESCE($16, bill_to_name),
+        bill_to_address  = COALESCE($17, bill_to_address),
+        updated_by       = $18,
+        updated_at       = NOW()
+      WHERE id = $19 RETURNING *
+    `, [
+      manualNum || null, template_type || null,
+      personnel_salary || null, consumables || null, overhead_amount || null,
+      profit_rate || null, profit_amount || null,
+      subtotal || null, vat_rate || null, vat_amount || null,
+      discount_amount !== undefined ? discount_amount : null,
+      total_amount || null, currency || null, due_date || null, notes || null,
+      bill_to_name || null, bill_to_address || null,
+      req.user?.dbId || null, req.params.id,
+    ]);
+
     if (!r.rows.length) return res.status(404).json({ error: 'Invoice not found' });
+
+    // Replace line items if provided
+    if (Array.isArray(line_items)) {
+      await query('DELETE FROM invoice_line_items WHERE invoice_id = $1', [req.params.id]);
+      for (const item of line_items) {
+        await query(`
+          INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price)
+          VALUES ($1,$2,$3,$4)
+        `, [req.params.id, item.description, item.quantity || 1, item.unit_price || 0]);
+      }
+    }
+
+    logger.info(`Invoice ${r.rows[0].invoice_number} updated by ${req.user?.email}`);
     res.json({ invoice: r.rows[0] });
   } catch (err) { next(err); }
 }
