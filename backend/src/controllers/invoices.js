@@ -43,8 +43,8 @@ async function getById(req, res, next) {
     const inv = await query(`
       SELECT i.*,
              c.first_name, c.last_name, c.email, c.phone, c.company_name,
-             cb.first_name || ' ' || cb.last_name AS created_by_name,
-             ub.first_name || ' ' || ub.last_name AS updated_by_name
+             cb.full_name AS created_by_name,
+             ub.full_name AS updated_by_name
       FROM invoices i
       JOIN customers c ON c.id = i.customer_id
       LEFT JOIN staff cb ON cb.id = i.created_by
