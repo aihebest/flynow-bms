@@ -264,7 +264,8 @@ function InvoiceForm({ invoice, lineItems: existingLines, onSave, onCancel }) {
   const overheadA = salaryN * OVERHEAD_RATE / 100;
   const subA      = salaryN + consumN + overheadA;
   const profitA   = salaryN * CONTRACT_PROFIT_R / 100;   // same base as overhead: Personnel Salary only
-  const vatA      = profitA * VAT_RATE_ON_PROFIT / 100;
+  const vatBaseA  = consumN + overheadA + profitA;        // VAT base = Consumables + Overhead + Profit
+  const vatA      = vatBaseA * VAT_RATE_ON_PROFIT / 100;
   const totalA    = subA + profitA + vatA;
 
   // ── Template B (Ad-hoc) — pre-populate from existing line items ──
@@ -449,7 +450,7 @@ function InvoiceForm({ invoice, lineItems: existingLines, onSave, onCancel }) {
               <CalcRow label={`3. Overhead Cost (${OVERHEAD_RATE}% of Personnel)`} value={overheadA} currency={form.currency} />
               <CalcRow label="Subtotal" value={subA} currency={form.currency} bold border />
               <CalcRow label={`Profit (${CONTRACT_PROFIT_R}% of Personnel Salary)`} value={profitA} currency={form.currency} />
-              <CalcRow label={`${VAT_RATE_ON_PROFIT}% VAT (on Profit only)`} value={vatA} currency={form.currency} />
+              <CalcRow label={`${VAT_RATE_ON_PROFIT}% VAT (on Consumables + Overhead + Profit)`} value={vatA} currency={form.currency} />
               <CalcRow label="Grand Total" value={totalA} currency={form.currency} bold blue border />
             </div>
           </div>
@@ -769,7 +770,7 @@ function InvoiceDetail({ invoice: initial, onBack, onEdit }) {
             </tr>` : ''}
             ${parseFloat(invoice.vat_amount) > 0 ? `
             <tr>
-              <td style="padding:5px 16px 5px 0;color:#003366;font-weight:700;text-align:right">7.5% VAT (on Profit):</td>
+              <td style="padding:5px 16px 5px 0;color:#003366;font-weight:700;text-align:right">7.5% VAT:</td>
               <td style="padding:5px 0;text-align:right;font-weight:700;color:#003366">${fmtAmt(invoice.vat_amount)}</td>
             </tr>` : ''}
             <tr>
@@ -1064,7 +1065,7 @@ function InvoiceDetail({ invoice: initial, onBack, onEdit }) {
               )}
               {parseFloat(invoice.vat_amount) > 0 && (
                 <div className="flex justify-between text-[#003366] font-semibold">
-                  <span>7.5% VAT (on Profit)</span>
+                  <span>7.5% VAT</span>
                   <span>{fmt(invoice.vat_amount, invoice.currency)}</span>
                 </div>
               )}
